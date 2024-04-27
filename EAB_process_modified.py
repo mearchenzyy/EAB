@@ -220,19 +220,6 @@ def process_EAB_01(Lrange, cb_data, pauli_request_list, counts_batch=None, repea
             n = job_data["n"]
             L = job_data["L"]
             clifford_layer = job_data["clifford_layer"]
-            #print("n=%d" % n, "batch", b, "circuit", i)
-            # print(job_data["circuit"].item().shape)
-            # sys.exit(0)
-
-            
-
-            ###
-            # circuit = construct_circuit(job_data["n"], job_data["L"], job_data["circuit"], periodic=periodic)
-            # job = execute(circuit, backend, backend_options={"max_parallel_threads": 0})
-            # job = execute(circuit, backend, max_parallel_threads=0)
-            # state_vector = np.array(job.result().get_statevector())
-            
-            # pauliOp = job_data["pauli"]
             cliffordOp = Clifford.from_dict(job_data['clifford'])
 
             '''TODO: add inject Pauli noise according to inject_pauli_sparse
@@ -260,98 +247,44 @@ def process_EAB_01(Lrange, cb_data, pauli_request_list, counts_batch=None, repea
                 cliffordOp = cliffordOp.compose(injectOp)
 
             if use_density_matrix is True:
-                # rho = result_batch.data(circuit_count)['density_matrix']
-                # F = np.real(np.trace(rho @ pauliOp.to_matrix()))
-                # # print(F)
                 pass
             else:
-                # assert np.mod(pauliOp.phase,2) == 0
-                # phase = (-1)**(pauliOp.phase>>1)
-                # if phase == 1:
-                #     label = pauliOp.to_label()
-                # else:
-                #     label = pauliOp.to_label()[1:]
-                # assert len(label) == n
+                if (any([L==d for d in Lrange])):
+                    outcomes = job_data["counts"]
+                    for pauli_label in pauli_request_list:
+                        pauli = Pauli(pauli_label)
+                        assert pauli.to_label()[-n:] == pauli.evolve(cliffordOp.adjoint()).to_label()[-n:] # total clifford -> identity (except for intc_cb)
+                        correction_phase = (-1)**(pauli.phase != pauli.evolve(cliffordOp.adjoint()).phase)
+    
+                        F = 0
+                        tot = 0 
+                        for key, counts in outcomes.items():
+                            F_key = 1
+                            for j in range(n):
+                                # print(key)
+                                # print([key[j]],[key[j+n]])
+    #                             pdb.set_trace()
+                                pauli_bell = Pauli(([key[j+n]=='1'],[key[j]=='0'])) ### change order if not correct
+    
+                                phase_1q = (-1)**(Pauli(pauli_label[j]).anticommutes(pauli_bell))
+                                # print("phase_1q = %d" % phase_1q)
+                                F_key *= phase_1q
+                            F += F_key * counts
+                            tot += counts
+    #                     if (i==20):
+    #                         pdb.set_trace()
+                        
+                        F = F*correction_phase/tot
+    #                     F = abs(F)/tot
+    
+                        fidelity_list[pauli_label][L].append(F)
+                else:
+                    continue
 
-                # phase = pauliOp.phase
-                # label = pauliOp.to_label()                
-                # label = label[len(label)-n:] # remove phase
-
-                #outcomes = result_batch.data(circuit_count)['counts']
-#                 outcomes = result_batch.get_counts(circuit_count)
-                outcomes = job_data["counts"]
-                
-                #print(outcomes)
-
-
-                for pauli_label in pauli_request_list:
-
-                    
-
-                    pauli = Pauli(pauli_label)
-                    # print("--------------")
-                    # print("Request = ", pauli)
-                    # print("Correction = ", pauliOp)
-                    
-
-
-                    assert pauli.to_label()[-n:] == pauli.evolve(cliffordOp.adjoint()).to_label()[-n:] # total clifford -> identity (except for intc_cb)
-                    correction_phase = (-1)**(pauli.phase != pauli.evolve(cliffordOp.adjoint()).phase)
-
-
-                    # print("correction_phase = %d" % correction_phase)
-                    # label = pauli.to_label()
-                    # label = label[len(label)-n:]
-
-                    F = 0
-                    tot = 0 
-                    for key, counts in outcomes.items():
-                        F_key = 1
-                        for j in range(n):
-                            # print(key)
-                            # print([key[j]],[key[j+n]])
-#                             pdb.set_trace()
-                            pauli_bell = Pauli(([key[j+n]=='1'],[key[j]=='0'])) ### change order if not correct
-                            # bell_label = Pauli(([key[j+n]],[key[j]])) ### change order if not correct
-                            # print("%dth" % j)
-                            # print("Bell state Pauli = ", pauli_bell)
-                            # print("Request (1q) = ", Pauli(pauli_label[j]))
-
-                            phase_1q = (-1)**(Pauli(pauli_label[j]).anticommutes(pauli_bell))
-                            # print("phase_1q = %d" % phase_1q)
-                            F_key *= phase_1q
-                        F += F_key * counts
-                        tot += counts
-#                     if (i==20):
-#                         pdb.set_trace()
-                    
-                    F = F*correction_phase/tot
-#                     F = abs(F)/tot
-
-                    fidelity_list[pauli_label][L].append(F)
-
-
-                    # F = 0
-                    # tot = 0
-                    # for key, counts in outcomes.items():
-                    #     F_key = 1
-                    #     for j in range(n):
-                    #         if label[j]!='I' and key[j] == '1':
-                    #             F_key *= -1
-                    #     F += F_key * counts
-                    #     tot += counts
-
-                    # F = F*phase/tot
-
-
-                
-
-            # counts = {}
             if repeat is None:
                 R = 1
             else:
                 R = job_data["repeat"]
-#             print("circuit count:", circuit_count)
 
             circuit_count += R
 
