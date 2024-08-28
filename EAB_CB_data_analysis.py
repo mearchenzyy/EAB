@@ -55,8 +55,10 @@ def map_statepop_2_ibm_mapping_no_ancilla(counts,n):
         
 
 
-def CB_load_circuit (n,C, depth,pauli_sample_list,circ_path):
+def CB_load_circuit (n,C, depth,pauli_sample_list,circ_path): 
     '''
+    TO DO:
+    this function is not working. Needs to be fixed.
     load CB circuits into a dictionary called "all_circuits"
     n: number of qubits
     C: sample for each depth
@@ -77,18 +79,22 @@ def CB_load_circuit (n,C, depth,pauli_sample_list,circ_path):
             n=f.find("_")
             n1=f.find(".")
             Plabel=f[n-2:n]
-            print(Plabel)
+            # print(Plabel)
             dlabel=f[n+3:n1]
-            print (type(dlabel))
-            file=open(circ_path+f)
-            Lines= file.readlines()
-    #         c_d8=[]
-            count = 0
-            for line in Lines:
-                all_circuits[Plabel][int(dlabel)].append(line)
-                count += 1
-    #         print (count)
-            count=0
+            # print (type(dlabel))
+            if int(dlabel) in depth:
+                file=open(circ_path+f)
+                Lines= file.readlines()
+        #         c_d8=[]
+                count = 0
+                for line in Lines:
+                    # print(Plabel)
+                    # print (dlabel)
+                    all_circuits[Plabel][int(dlabel)]=[]
+                    all_circuits[Plabel][int(dlabel)].append(line)
+                    count += 1
+        #         print (count)
+                count=0
     
     return all_circuits
 
@@ -161,7 +167,6 @@ def commute(p,q):
             if p[i] != q[i]:
                 c *= -1
     return c
-
 def fidelity_to_error(pauli_fidelity,n):
     N = 4**n
     pauli_error = {}
@@ -172,6 +177,25 @@ def fidelity_to_error(pauli_fidelity,n):
             q = int_to_pauli(j,n)
             pauli_error[p] += pauli_fidelity[q] * commute(p,q) / N
     return pauli_error
+
+def fidelity_to_error_w_errorbar(pauli_fidelity,pauli_fidelity_errorbar,n):
+    '''
+    same as the fidelity to error function above but calculates the error bar on Puali err through simple error propogation for addition 
+    and subtraction (use standard deviation of sum of squared errors)
+    '''
+    N = 4**n
+    pauli_error = {}
+    pauli_error_errorbar = {}
+    for i in range(N):
+        p = int_to_pauli(i,n)
+        pauli_error[p] = 0
+        pauli_error_errorbar[p] = 0
+        for j in range(N):
+            q = int_to_pauli(j,n)
+            pauli_error[p] += pauli_fidelity[q] * commute(p,q) / N
+            pauli_error_errorbar[p] += (pauli_fidelity_errorbar[q]/N)**2
+        pauli_error_errorbar[p] = np.sqrt(pauli_error_errorbar[p])
+    return pauli_error,pauli_error_errorbar
 
 def bootstrap_N_save(s,depth,raw_fidelity_list,data_save_path,pauli_request_list,nqubit):
     '''
