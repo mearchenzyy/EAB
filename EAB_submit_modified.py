@@ -57,6 +57,7 @@ def add_XX_clifford(circ,index):
     circ.s(2*index+1)
     circ.h(2*index+1)       
 
+
 def submit_eab(n,n_total,Lrange,C,batch,qubit_map,clifford_layer='Id',gset="Pauli",repeat=None,periodic=False,use_density_matrix=False):
 	data_save = {}
 	q = qubit_map
@@ -212,14 +213,110 @@ def submit_eab(n,n_total,Lrange,C,batch,qubit_map,clifford_layer='Id',gset="Paul
 		data_save["batch_%d" % b] = data_batch
 	return data_save, eab_circ_all
 
-	# sys.exit(0)
+def submit_eab_ancilla_pauli_twirl(n,n_total,Lrange,C,batch,qubit_map,clifford_layer='Id',gset="Pauli",repeat=None,periodic=False,use_density_matrix=False):
+	data_save = {}
+	q = qubit_map
+	eab_circ_all = []
+	for b in range(batch):
 
-	# job_manager = IBMQJobManager()
-	# job_set = job_manager.run(circuits, backend, shots=8192)
-	# job_set_id = job_set.job_set_id()
+		circuits_batch = []
+		data_batch = []
+
+		for l in range(len(Lrange)):
+			L = Lrange[l]
+			for c in range(C):
+				# run the circuit
+				job_save = {}
+
+				# n_total = # of qubits on devices. [1..n] qubits actually used
+				state = QuantumCircuit(2*n,2*n)
+				gates_all= QuantumCircuit(2*n,2*n)
+				gates = QuantumCircuit(n)
+				gates_anc = QuantumCircuit(n)
+				
+
+				# state preparation
+				# Bell state Psi_0
+				for j in range(n):
+					# may need to take device structure into consideration
+					prepare_bell_state_1q(state,j,j+n)
+				state.barrier()
+
+				for i in range(L):
+					pauliLayer = [random.choice(['I','X','Y','Z']) for j in range(n)]
+					#pauliTrans = Pauli(''.join(pauliLayer[::-1]))
+					for j in range(n):
+						pauli_gate_1q(gates_all,j,pauli=pauliLayer[j])
+						pauli_gate_1q(gates,j,pauli=pauliLayer[j])
+
+					pauliLayer = [random.choice(['I','X','Y','Z']) for j in range(n)]
+					for j in range(n,2*n):
+						pauli_gate_1q(gates_all,j,pauli=pauliLayer[j])
+						pauli_gate_1q(gates_anc,(j-n),pauli=pauliLayer[j])
+					
+					'''Clifford Layer'''
+					if clifford_layer == 'Id':
+						pass
+					elif clifford_layer == 'CNOT':
+						ngates = int(n/2)
+						for j in range(ngates):
+							gates.cx(2*j,2*j+1)
+					elif clifford_layer == 'XX':
+						ngates = int(n/2)
+						for j in range(ngates):
+							add_XX_clifford(gates,j)
+                           
+					gates.barrier()
+
+				# final layer:
+				pauliLayer = [random.choice(['I','X','Y','Z']) for j in range(n)]
+				for j in range(n):
+					pauli_gate_1q(gates_all,j,pauli=pauliLayer[j])
+					pauli_gate_1q(gates,j,pauli=pauliLayer[j])
+				
+				gates_anc_inv=gates_anc.inverse()
+				gates_all = gates_anc_inv.compose(gates_all,range(n,2*n))
+
+
+				'''The choice of depth guarantees 'gates' is Pauli'''	
+				cliffordOp = Clifford(gates)
 
 
 
-	# data = {}
-	# data["data"] = data_save
-	# data["job_set_id"] = job_set_id
+				circuit = state.compose(gates_all,range(n))
+
+				#transpile circuit only here?
+				
+
+				if use_density_matrix:
+					circuit.save_density_matrix()
+				else:
+					circuit.barrier()
+
+					for j in range(n):
+						bell_measurement_1q(circuit,j,j+n)
+						# bell_measurement_1q(circuit,q[j],q[j+n])
+
+					circuit.barrier()
+					#circuit.measure([q[i] for i in range(2*n)], [i for i in range(2*n)])
+					circuit.measure([i for i in range(2*n)], [i for i in range(2*n)])
+
+				R = 1
+				if repeat is not None:
+					R = repeat[l]
+				for r in range(R):
+					circuits_batch.append(circuit)
+
+				job_save["n"] = n
+				job_save["L"] = L
+				job_save["c"] = c
+				job_save['clifford'] = cliffordOp.to_dict() # actually Pauli
+				job_save["repeat"] = R
+				job_save["clifford_layer"] = clifford_layer
+
+
+				data_batch.append(job_save)
+
+		eab_circ_all.append(circuits_batch)
+		data_save["batch_%d" % b] = data_batch
+	return data_save, eab_circ_all

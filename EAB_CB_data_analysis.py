@@ -231,3 +231,78 @@ def bootstrap_N_save(s,depth,raw_fidelity_list,data_save_path,pauli_request_list
         pickle.dump(alpha_detail, fp)
     with open(data_save_path+filename_error, "wb") as fp:
         pickle.dump(alpha_error_detail, fp)
+
+def EAB_error_mitigation(noisy_fidelity_list, anc_exp_fidelity_list):
+    """
+    noisy_fidelity_list: noisy EAB results with ancilla twirling
+    anc_exp_fidelity_list: II EAB results with ancilla twirling (both system and ancilla has the same error)
+    """
+    mitigated_fidelity={}
+    for pauli in anc_exp_fidelity_list:
+        mitigated_fidelity[pauli]=0
+        mitigated_fidelity[pauli]=noisy_fidelity_list[pauli]/np.sqrt(anc_exp_fidelity_list[pauli])
+    return mitigated_fidelity
+
+
+def fit_CB_plot(X, xeb_list):
+    Y = [np.mean(xeb_list[L]) for L in X]
+    Yerr = [sem(xeb_list[L]) for L in X]
+    #print(linregress(X,np.log(Y)))
+    
+    
+    try:
+        params, pcov = curve_fit(rcs_fit_fun, X, Y, sigma=Yerr, absolute_sigma=True, p0=[1,1])
+        alpha = params[1]
+        a=params[0]
+        params_err = np.sqrt(np.diag(pcov))
+        alpha_err = params_err[1]
+
+    except RuntimeError:
+        alpha = 1.0
+        alpha_err = 0.0
+
+    # params, pcov = curve_fit(rcs_fit_fun, X, Y, sigma=Yerr, absolute_sigma=True, p0=[1,1])
+    # #params, pcov = curve_fit(rcs_fit_fun, X, Y, absolute_sigma=True, p0=[1,1])
+
+
+    # print(params)
+
+    return alpha,a, alpha_err,Y, Yerr
+
+
+def symmetrized_fidelity(deg_pairs_dic,pauli_request_list,alpha_detail,alpha_detail_errorbar,alpha_detail_depth="alpha_detail_d2832"):
+        """symmetrized fidelity"""
+        EAB_plot_dic={}
+        EAB_plot_errorbar_dic={}
+        EAB_msqrt={}
+        EAB_msqrt_errorbar={}
+
+        temp=[]
+        pauli_request_list_temp=pauli_request_list.copy()
+        deg_pairs_dic_temp=deg_pairs_dic.copy()
+        for pauli in pauli_request_list:
+        # print (pauli)
+            if pauli in deg_pairs_dic_temp.keys():
+                new_key="{"+pauli+","+deg_pairs_dic_temp[pauli]+"}"
+                print (new_key)
+                EAB_plot_dic[new_key]= np.sqrt(np.mean(alpha_detail[alpha_detail_depth][pauli])*np.mean(alpha_detail[alpha_detail_depth][deg_pairs_dic_temp[pauli]]))
+                EAB_plot_errorbar_dic[new_key]=0.5*(np.mean(alpha_detail_errorbar[alpha_detail_depth][pauli])/np.mean(alpha_detail[alpha_detail_depth][pauli])+np.mean(alpha_detail_errorbar[alpha_detail_depth][deg_pairs_dic_temp[pauli]])/np.mean(alpha_detail[alpha_detail_depth][deg_pairs_dic_temp[pauli]]))*EAB_plot_dic[new_key]
+                
+                EAB_msqrt[pauli]=EAB_plot_dic[new_key]
+                EAB_msqrt[deg_pairs_dic_temp[pauli]]=EAB_plot_dic[new_key]
+                EAB_msqrt_errorbar[pauli]=EAB_plot_errorbar_dic[new_key]
+                EAB_msqrt_errorbar[deg_pairs_dic_temp[pauli]]=EAB_plot_errorbar_dic[new_key]
+
+                temp.append(deg_pairs_dic_temp[pauli])
+                deg_pairs_dic_temp.pop(deg_pairs_dic_temp[pauli])
+                deg_pairs_dic_temp.pop(pauli)
+                # temp.append(deg_pairs_dic[pauli])
+
+
+            else:
+                    if pauli not in temp:
+                        EAB_plot_dic[pauli]= np.mean(alpha_detail[alpha_detail_depth][pauli])
+                        EAB_plot_errorbar_dic[pauli]=np.mean(alpha_detail_errorbar[alpha_detail_depth][pauli])
+                        EAB_msqrt[pauli]= np.mean(alpha_detail[alpha_detail_depth][pauli])
+                        EAB_msqrt_errorbar[pauli]=np.mean(alpha_detail_errorbar[alpha_detail_depth][pauli])
+        return EAB_msqrt,EAB_msqrt_errorbar,EAB_plot_dic,EAB_plot_errorbar_dic
