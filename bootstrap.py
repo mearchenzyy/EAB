@@ -38,6 +38,11 @@ def bootstrap_fit_EAB_plot(X, xeb_list):
     
 #specify number of elements to resample : rs
 def bootstrap_fit_EAB_plot_rs(X, xeb_list,rs):
+    '''
+    X: list of depth
+    xeb_list: dictionary of depth and data, each key is a depth and each value is a list of 20 data points
+    rs: number of elements to resample from each list in xeb_list
+    '''
     full_list=deepcopy(xeb_list)
     alpha_rtn_frm_fit=[0]*10
     alpha_err_rtn_frm_fit=[0]*10
